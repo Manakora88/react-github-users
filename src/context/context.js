@@ -8,14 +8,16 @@ const rootUrl = 'https://api.github.com'
 
 const GithubContext = React.createContext()
 
+// Provider, Consumer - GithubContext.Provider
+
 const GithubProvider = ({ children }) => {
   const [githubUser, setGithubUser] = useState(mockUser)
   const [repos, setRepos] = useState(mockRepos)
   const [followers, setFollowers] = useState(mockFollowers)
-  //request loading
+  // request loading
   const [requests, setRequests] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
-  //error
+  // error
   const [error, setError] = useState({ show: false, msg: '' })
 
   const searchGithubUser = async (user) => {
@@ -27,14 +29,22 @@ const GithubProvider = ({ children }) => {
     if (response) {
       setGithubUser(response.data)
       const { login, followers_url } = response.data
-      //repos
-      axios(`${rootUrl}/users${login}/repos?per_page=1000`).then((response) =>
-        setRepos(response.data)
-      )
-      //followers
-      axios(`${followers_url}per_page=100`).then((response) =>
-        setFollowers(response.data)
-      )
+
+      await Promise.allSettled([
+        axios(`${rootUrl}/users/${login}/repos?per_page=100`),
+        axios(`${followers_url}?per_page=100`),
+      ])
+        .then((results) => {
+          const [repos, followers] = results
+          const status = 'fulfilled'
+          if (repos.status === status) {
+            setRepos(repos.value.data)
+          }
+          if (followers.status === status) {
+            setFollowers(followers.value.data)
+          }
+        })
+        .catch((err) => console.log(err))
     } else {
       toggleError(true, 'there is no user with that username')
     }
@@ -42,7 +52,7 @@ const GithubProvider = ({ children }) => {
     setIsLoading(false)
   }
 
-  //check rate
+  //  check rate
   const checkRequests = () => {
     axios(`${rootUrl}/rate_limit`)
       .then(({ data }) => {
@@ -51,7 +61,7 @@ const GithubProvider = ({ children }) => {
         } = data
         setRequests(remaining)
         if (remaining === 0) {
-          toggleError(true, 'sorry, you have exeeded your hourly rate limit!')
+          toggleError(true, 'sorry, you have exceeded your hourly rate limit!')
         }
       })
       .catch((err) => console.log(err))
@@ -59,9 +69,12 @@ const GithubProvider = ({ children }) => {
   function toggleError(show = false, msg = '') {
     setError({ show, msg })
   }
-  //error
+  // error
   useEffect(checkRequests, [])
-
+  // get initial user
+  useEffect(() => {
+    searchGithubUser('john-smilga')
+  }, [])
   return (
     <GithubContext.Provider
       value={{
